@@ -12,15 +12,49 @@ def extract_party_code(text):
 
 @bot.message_handler(commands=['start'])
 def start(message):
-    if extract_party_code(message.text) != None:
-        with open(f'{extract_party_code(message.text)}.txt', 'r+') as party_pool:
-            party_pool.write(message.from_user.id.id)
-        with open(f'{message.from_user.id.id}.txt', 'a') as userprofile:
-            userprofile.write(f'profile of tg://{message.from_user.id.id} (aka @{message.for_user.username})')
-        bot.send_message(message.from_user.id, f'Твой профиль создан, чтобы отредактировать его - напиши /editprofile\n\nТвой профиль сейчас выглядит так:\n{open(f'{message.from_user.id}.txt', 'r').read()}')
- 
-    else:
-        bot.send_message(message.chat.id, 'Привет! Это бот по тайному санте! Если тебя пригласили присоединиться - перейди по ссылке твоего организатора, если ты и есть организатор - создай свою группу. \n\n Создать группу - startparty\n\nРедактировать профиль - /editprofile\n\nПросмотреть свой профиль - /myprofile\n\n Просмотреть профиль получателя /myrecipent')
+    # safely extract start payload (e.g. "pool_xxx")
+    payload = None
+    if message.text:
+        parts = message.text.split(maxsplit=1)
+        if len(parts) > 1:
+            payload = parts[1].strip()
+
+    if payload and payload.startswith('pool_'):
+        filename = f'{payload}.txt'
+
+        # read existing participant ids (avoid duplicates)
+        participants = set()
+        if os.path.exists(filename):
+            with open(filename, 'r', encoding='utf-8') as f:
+                participants = {line.strip() for line in f if line.strip()}
+
+        user_id = str(message.from_user.id)
+        if user_id not in participants:
+            participants.add(user_id)
+            with open(filename, 'w', encoding='utf-8') as f:
+                f.write('\n'.join(sorted(participants)))
+
+        # create default profile if missing or empty
+        userfile = f'{user_id}.txt'
+        if (not os.path.exists(userfile)) or os.path.getsize(userfile) == 0:
+            username = message.from_user.username
+            with open(userfile, 'w', encoding='utf-8') as uf:
+                if username:
+                    uf.write(f'profile of https://t.me/{username} (tg://{user_id})')
+                else:
+                    uf.write(f'profile of tg://{user_id} ({user_id})')
+
+        with open(userfile, 'r', encoding='utf-8') as uf:
+            profile_contents = uf.read()
+
+        bot.send_message(message.chat.id,
+                         f'Вы успешно присоединились к группе {payload}.\n\n'
+                         f'Чтобы отредактировать профиль, напишите /editprofile\n\n'
+                         f'Твой профиль сейчас выглядит так:\n{profile_contents}')
+        return
+
+    # default start behaviour
+    bot.send_message(message.chat.id, 'Привет! Это бот по тайному санте! Если тебя пригласили присоединиться - перейди по ссылке твоего организатора, если ты и есть организатор - создай свою группу. \n\n Создать группу - startparty\n\nРедактировать профиль - /editprofile\n\nПросмотреть свой профиль - /myprofile\n\n Просмотреть профиль получателя /myrecipent')
 
 @bot.message_handler(commands=['editprofile'])
 def edit_profile(message):
